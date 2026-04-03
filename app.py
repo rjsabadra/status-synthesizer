@@ -42,15 +42,20 @@ st.markdown("""
         border: 1px solid #eaeaea;
         box-shadow: 0 1px 6px rgba(0,0,0,0.04);
         margin-bottom: 1rem;
+        height: 100%;
     }
     .section-title {
         font-size: 1rem;
         font-weight: 700;
         margin-bottom: 0.5rem;
     }
-    .muted {
+    .subtle-label {
+        font-size: 0.82rem;
+        font-weight: 700;
         color: #666;
-        font-size: 0.92rem;
+        margin-bottom: 0.35rem;
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -58,49 +63,38 @@ st.markdown("""
 st.title("AI Status Synthesis Assistant")
 st.caption("Turn scattered project updates into a structured PMO summary with blockers, risks, and next steps.")
 
-sample_updates = """Engineering: API integration is 80% complete, but blocked on auth review.
-Design: Final mocks approved and handed off.
-Ops: Vendor onboarding delayed by 3 days.
-PM notes: Launch date may slip if auth review is not completed this week.
-QA: Test plan is ready, execution starts after API handoff."""
+sample_updates = """Program Lead: Training content is 90% ready.
+HR: Participant list is finalized.
+IT: Meeting link and LMS access are not yet set up.
+Facilitator: Available for the planned session date.
+PM notes: If IT setup is delayed beyond Wednesday, the training may need to be postponed."""
 
 raw_updates = st.text_area(
     "Paste raw project updates",
     value=sample_updates,
     height=220,
-    placeholder="Paste updates from engineering, design, operations, PM notes, etc."
+    placeholder="Paste updates from different teams or stakeholders here."
 )
 
 view = st.radio("Select output view", ["Leadership View", "Team View"], horizontal=True)
 
-def parse_response(text: str):
-    sections = {
-        "Overall Status": "",
-        "Summary": "",
-        "Blockers": "",
-        "Risks": "",
-        "Next Steps": ""
-    }
-
+def parse_response(text: str, expected_sections: list[str]):
+    sections = {section: "" for section in expected_sections}
     current_key = None
+
     for line in text.splitlines():
         stripped = line.strip()
-        if stripped.startswith("Overall Status:"):
-            current_key = "Overall Status"
-            sections[current_key] = stripped.replace("Overall Status:", "").strip()
-        elif stripped.startswith("Summary:"):
-            current_key = "Summary"
-            sections[current_key] = stripped.replace("Summary:", "").strip()
-        elif stripped.startswith("Blockers:"):
-            current_key = "Blockers"
-            sections[current_key] = stripped.replace("Blockers:", "").strip()
-        elif stripped.startswith("Risks:"):
-            current_key = "Risks"
-            sections[current_key] = stripped.replace("Risks:", "").strip()
-        elif stripped.startswith("Next Steps:"):
-            current_key = "Next Steps"
-            sections[current_key] = stripped.replace("Next Steps:", "").strip()
-        elif current_key and stripped:
+        matched_key = None
+
+        for section in expected_sections:
+            prefix = f"{section}:"
+            if stripped.startswith(prefix):
+                matched_key = section
+                current_key = section
+                sections[current_key] = stripped.replace(prefix, "").strip()
+                break
+
+        if matched_key is None and current_key and stripped:
             sections[current_key] += ("\n" if sections[current_key] else "") + stripped
 
     return sections
@@ -115,7 +109,7 @@ def render_status_badge(status: str):
         css_class = "status-pill status-offtrack"
 
     st.markdown(
-        f'<div class="{css_class}">Overall Status: {status}</div>',
+        f'<div class="{css_class}">Overall Status: {status if status else "Unknown"}</div>',
         unsafe_allow_html=True
     )
 
@@ -134,22 +128,26 @@ def render_card(title: str, content: str):
 if st.button("Generate Status Summary", use_container_width=True):
     client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
 
-    prompt = f"""
-You are helping a program manager synthesize project updates.
+    if view == "Leadership View":
+        expected_sections = [
+            "Overall Status",
+            "Executive Summary",
+            "Top Risks",
+            "Decisions Needed"
+        ]
 
-Given the raw updates below, generate:
-1. Overall status: On Track, At Risk, or Off Track
-2. A concise summary
-3. Key blockers
-4. Key risks
-5. Next steps
+        prompt = f"""
+You are helping a program manager create a leadership-ready status summary.
 
-If the selected mode is Leadership View, keep the summary high-level and decision-oriented.
-If the selected mode is Team View, make it slightly more operational and action-oriented.
+Given the raw project updates below, generate:
+1. Overall Status: On Track, At Risk, or Off Track
+2. Executive Summary: a short, high-level summary focused on business impact and current situation
+3. Top Risks: the 2-4 most important risks or concerns
+4. Decisions Needed: any escalations, approvals, or decisions leadership should be aware of
 
-Keep each section crisp and practical.
-
-Mode: {view}
+Keep the tone crisp, high-level, and decision-oriented.
+Do not go too deep into operational detail.
+Keep the output easy to scan.
 
 Raw updates:
 {raw_updates}
@@ -157,10 +155,44 @@ Raw updates:
 Return the response in this exact format:
 
 Overall Status:
-Summary:
+Executive Summary:
+Top Risks:
+Decisions Needed:
+"""
+    else:
+        expected_sections = [
+            "Overall Status",
+            "Detailed Summary",
+            "Blockers",
+            "Risks",
+            "Next Steps",
+            "Missing Information"
+        ]
+
+        prompt = f"""
+You are helping a program manager create an execution-focused team summary.
+
+Given the raw project updates below, generate:
+1. Overall Status: On Track, At Risk, or Off Track
+2. Detailed Summary: a concise operational summary
+3. Blockers: current blockers affecting progress
+4. Risks: possible issues that may affect timeline or execution
+5. Next Steps: the most important action items
+6. Missing Information: anything unclear, missing, or lacking ownership
+
+Keep the tone practical, action-oriented, and easy for a working team to use.
+
+Raw updates:
+{raw_updates}
+
+Return the response in this exact format:
+
+Overall Status:
+Detailed Summary:
 Blockers:
 Risks:
 Next Steps:
+Missing Information:
 """
 
     try:
@@ -170,19 +202,34 @@ Next Steps:
                 contents=prompt
             )
 
-        parsed = parse_response(response.text)
+        parsed = parse_response(response.text, expected_sections)
 
         st.markdown("---")
-        render_status_badge(parsed["Overall Status"])
-        render_card("Summary", parsed["Summary"])
+        render_status_badge(parsed.get("Overall Status", ""))
 
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            render_card("Blockers", parsed["Blockers"])
-        with col2:
-            render_card("Risks", parsed["Risks"])
-        with col3:
-            render_card("Next Steps", parsed["Next Steps"])
+        if view == "Leadership View":
+            st.markdown('<div class="subtle-label">Leadership Summary</div>', unsafe_allow_html=True)
+            render_card("Executive Summary", parsed.get("Executive Summary", ""))
+
+            col1, col2 = st.columns(2)
+            with col1:
+                render_card("Top Risks", parsed.get("Top Risks", ""))
+            with col2:
+                render_card("Decisions Needed", parsed.get("Decisions Needed", ""))
+
+        else:
+            st.markdown('<div class="subtle-label">Execution Summary</div>', unsafe_allow_html=True)
+            render_card("Detailed Summary", parsed.get("Detailed Summary", ""))
+
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                render_card("Blockers", parsed.get("Blockers", ""))
+            with col2:
+                render_card("Risks", parsed.get("Risks", ""))
+            with col3:
+                render_card("Next Steps", parsed.get("Next Steps", ""))
+
+            render_card("Missing Information", parsed.get("Missing Information", ""))
 
         with st.expander("View raw project updates"):
             st.code(raw_updates)
