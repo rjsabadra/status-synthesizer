@@ -20,7 +20,7 @@ raw_updates = st.text_area(
 view = st.radio("View", ["Leadership View", "Team View"], horizontal=True)
 
 if st.button("Generate Status Summary"):
-    client = genai.Client(api_key=st.secrets["AIzaSyDbpzHj4_cZ8MyxsI75AETrXxGDyzACJyQ"])
+    client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
 
     prompt = f"""
 You are helping a program manager synthesize project updates.
