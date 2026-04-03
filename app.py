@@ -2,6 +2,7 @@ import streamlit as st
 from google import genai
 
 st.set_page_config(page_title="AI Status Synthesis Assistant", page_icon="📌")
+
 st.title("AI Status Synthesis Assistant")
 st.caption("Paste scattered project updates and generate a structured PMO summary.")
 
@@ -49,9 +50,15 @@ Risks:
 Next Steps:
 """
 
-    response = client.models.generate_content(
-        model="gemini-3-flash-preview",
-        contents=prompt
-    )
+    try:
+        with st.spinner("Generating summary..."):
+            response = client.models.generate_content(
+                model="gemini-2.5-flash",
+                contents=prompt
+            )
 
-    st.markdown(response.text)
+        st.markdown(response.text)
+
+    except Exception as e:
+        st.error("The model request failed. Please try again.")
+        st.exception(e)
