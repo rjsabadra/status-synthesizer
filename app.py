@@ -63,11 +63,11 @@ st.markdown("""
 st.title("AI Status Synthesis Assistant")
 st.caption("Turn scattered project updates into a structured PMO summary with blockers, risks, and next steps.")
 
-sample_updates = """Program Lead: Training content is 90% ready.
-HR: Participant list is finalized.
-IT: Meeting link and LMS access are not yet set up.
-Facilitator: Available for the planned session date.
-PM notes: If IT setup is delayed beyond Wednesday, the training may need to be postponed."""
+sample_updates = """Program Lead: Training content is almost complete.
+HR: Participant list finalized.
+IT: Meeting link and access setup pending.
+Trainer: Confirmed availability.
+PM notes: If IT setup is delayed, training may need to be postponed."""
 
 raw_updates = st.text_area(
     "Paste raw project updates",
